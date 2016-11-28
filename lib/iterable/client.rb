@@ -55,6 +55,21 @@ module Iterable
       api_get(:list, {})
     end
 
+    # Perform API GET request
+    def api_get(action, data)
+      api_request(action, data, 'GET')
+    end
+
+    # Perform API POST request
+    def api_post(action, data, binary_key = nil)
+      api_request(action, data, 'POST', binary_key)
+    end
+
+    #Perform API DELETE request
+    def api_delete(action, data)
+      api_request(action, data, 'DELETE')
+    end
+
     protected
 
     # params:
