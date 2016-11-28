@@ -9,7 +9,7 @@ require 'json'
 
 module Iterable
   class Client
-    DEFAULT_API_URI = 'https://api.iterable.com'
+    DEFAULT_API_URI = 'https://api.iterable.com/api'
 
     include Helpers
 
