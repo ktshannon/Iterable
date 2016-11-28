@@ -1,5 +1,5 @@
 require "iterable/version"
-
+require "iterable/client"
 module Iterable
   class ClientError < StandardError
   end
