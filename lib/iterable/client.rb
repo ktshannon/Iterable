@@ -1,5 +1,5 @@
-require 'Iterable/helpers'
-require 'Iterable/version'
+require 'iterable/helpers'
+require 'iterable/version'
 
 require 'net/http'
 require 'net/http/post/multipart'
@@ -783,7 +783,6 @@ module Iterable
       else
         data[:api_key] = @api_key
         data[:format] ||= 'json'
-        data[:sig] = get_signature_hash(data, @secret)
       end
 
       if !binary_key.nil?
