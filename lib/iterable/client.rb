@@ -15,12 +15,6 @@ module Iterable
 
     attr_accessor :verify_ssl
 
-    # params:
-    #   api_key, String
-    #   secret, String
-    #   api_uri, String
-    #
-    # Instantiate a new client; constructor optionally takes overrides for key/secret/uri and proxy server settings.
     def initialize(api_key=nil, api_uri=nil, proxy_host=nil, proxy_port=nil, opts={})
       @api_key = api_key || Iterable.api_key || raise(ArgumentError, "You must provide an API key or call Iterable.credentials() first")
       @api_uri = api_uri.nil? ? DEFAULT_API_URI : api_uri
@@ -31,28 +25,28 @@ module Iterable
       @last_rate_limit_info = {}
     end
 
-    # params:
-    #   template_name, String
-    #   email, String
-    #   vars, Hash
-    #   options, Hash
-    #     replyto: override Reply-To header
-    #     test: send as test email (subject line will be marked, will not count towards stats)
-    # returns:
-    #   Hash, response data from server
-    def send_email(template_name, email, vars={}, options = {}, schedule_time = nil, limit = {})
+    def send_email(campaignId, email, vars={}, options = {}, schedule_time = nil, limit = {})
       post = {}
-      post[:template] = template_name
-      post[:email] = email
-      post[:vars] = vars if vars.length >= 1
-      post[:options] = options if options.length >= 1
-      post[:schedule_time] = schedule_time if !schedule_time.nil?
-      post[:limit] = limit if limit.length >= 1
-      api_post(:send, post)
+      post[:campaignId] = campaignId
+      post[:recipientEmail] = email
+      post[:dataFields] = vars if vars.length >= 1
+      post[:sendAt] = schedule_time if !schedule_time.nil?
+      api_post("email/target", post)
     end
 
     def get_lists
-      api_get(:list, {})
+      api_get(:lists, {})
+    end
+
+    def subscribe(user, listId)
+      post = {}
+      post[:listId] = listId
+      post[:subscribers] = [user.iterable_vars]
+      api_post("lists/subscribe", post)
+    end
+
+    def get_campaigns
+      api_get(:campaigns, {})
     end
 
     # Perform API GET request
@@ -129,7 +123,7 @@ module Iterable
         req = Net::HTTP::Post::Multipart.new(uri.path, data)
       else
         req = Net::HTTP::Post.new(uri.path, headers)
-        req.set_form_data(data)
+        req.body = data.to_json
       end
       req
     end
@@ -140,27 +134,30 @@ module Iterable
     #   method, String "GET" or "POST"
     # returns:
     #   String, body of response
-    def http_request(action, data, method = 'POST', binary_key = nil)
-      data = flatten_nested_hash(data, false)
+    def http_request(action, data, method_type = 'POST', binary_key = nil)
 
       uri = "#{@api_uri}/#{action}"
-      if method != 'POST'
+      if method_type != "POST" && (!method_type.is_a? String)
         uri += "?" + data.map{ |key, value| "#{CGI::escape(key.to_s)}=#{CGI::escape(value.to_s)}" }.join("&")
       end
 
       req = nil
-      headers = {"User-Agent" => "Iterable API Ruby Client #{Iterable::VERSION}"}
 
       _uri  = URI.parse(uri)
 
-      if method == 'POST'
+      headers = {
+        "Content-Type": "text/json",
+        "Api-Key":"#{@api_key}"
+        }
+
+      if method_type == 'POST'
         req = set_up_post_request(
           _uri, data, headers, binary_key
         )
 
       else
         request_uri = "#{_uri.path}?#{_uri.query}"
-        if method == 'DELETE'
+        if method_type == 'DELETE'
           req = Net::HTTP::Delete.new(request_uri, headers)
         else
           req = Net::HTTP::Get.new(request_uri, headers)
@@ -173,12 +170,14 @@ module Iterable
         if _uri.scheme == 'https'
           http.ssl_version = :TLSv1
           http.use_ssl = true
+          http.set_debug_output $stderr
           http.verify_mode = OpenSSL::SSL::VERIFY_NONE if @verify_ssl != true  # some openSSL client doesn't work without doing this
           http.ssl_timeout = @opts[:http_ssl_timeout] || 5
         end
         http.open_timeout = @opts[:http_open_timeout] || 5
         http.read_timeout = @opts[:http_read_timeout] || 10
         http.close_on_empty_response = @opts[:http_close_on_empty_response] || true
+
 
         response = http.start do
           http.request(req)
@@ -190,8 +189,6 @@ module Iterable
         raise ClientError, "Unable to open stream to #{_uri}: #{e.message}"
       end
 
-      save_rate_limit_info(action, method, response)
-
       response.body || raise(ClientError, "No response received from stream: #{_uri}")
     end
 
@@ -201,12 +198,7 @@ module Iterable
     end
 
     def prepare_json_payload(data)
-      payload = {
-        :api_key => @api_key,
-        :format => 'json', #<3 XML
-        :json => data.to_json
-      }
-      payload
+      data
     end
 
     def save_rate_limit_info(action, method, response)
